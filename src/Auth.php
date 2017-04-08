@@ -52,7 +52,7 @@ final class Auth
         self::fresh();
         $ids = self::user('rules');
         if (!is_array($ids)) {
-            self::error('对不起！您无权进行该操作.','/auth/Login/index');
+            self::error('对不起！您无权进行该操作.',\think\Request::instance()->root().'/auth/Login/index');
         }
        
         if ( in_array('all', $ids)) {
@@ -107,7 +107,7 @@ final class Auth
             }
         }
         //无权限
-        self::error('对不起！您无权进行该操作','/auth/Login/index');
+        self::error('对不起！您无权进行该操作',\think\Request::instance()->root().'/auth/Login/index');
         exit;
     }
     private static function parseParam($str) {
