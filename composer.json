@@ -1,5 +1,5 @@
 {
-    "name": "Godok/Org",
+    "name": "godok/org",
 	"type": "godok-core",
     "description": "class for godok",
     "license": "Apache-2.0",
