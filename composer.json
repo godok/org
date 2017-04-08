@@ -1,0 +1,19 @@
+{
+    "name": "Godok/Org",
+	"type": "godok-core",
+    "description": "class for godok",
+    "license": "Apache-2.0",
+    "keywords": ["godok", "org", "goAuth"],
+    "authors": [{
+        "name": "fafa",
+        "email": "fafa2088@qq.com"
+    }],
+    "require": {
+        "php": ">=5.4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Godok\\Org\\": "src"
+        }
+    }
+}
