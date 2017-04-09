@@ -102,8 +102,6 @@ final class Auth
                     //condition所有参数都被匹配中，只验证这一条规则
                     $rules = [$rule['id']];
                     break;
-                } else {
-                    $rules[] = $rule['id'];
                 }
             }
         }
@@ -266,7 +264,7 @@ final class Auth
         }
         $list = $query->order("listorder asc")->limit(2048)->select();
         if( $list) {
-            return self::toTree($pid, $list);
+            return self::toTree($list, $pid, true);
         } else {
             return [];
         }
@@ -274,20 +272,26 @@ final class Auth
     /**
      * 权限树格式化
      */
-    private static function toTree($pid,$data)
+    private static function toTree($data = null, $pid = 0, $reset = false)
     {
-        static $node = null;
-        if(empty($data)) {
+        static $node = [];
+        if(empty($data) || !is_array($data) ) {
             return [];
         }
+        if( $reset ) {
+            $node = [];
+        }
         //父节点
-        if( $node === null ) {
+        if( $node === [] ) {
             foreach ($data as $item) {
+                if($item['pid'] == $item['id']) {
+                    //避免死循环
+                    continue;
+                }
                 if( isset($node[$item['pid']]) ) {
                     $node[$item['pid']][] = $item;
                 }else {
-                    $node[$item['pid']] = [];
-                    $node[$item['pid']][] = $item;
+                    $node[$item['pid']] = [$item];
                 }
             }
         }
@@ -296,7 +300,7 @@ final class Auth
         foreach( $data as $item ) {
             if($pid == $item['pid']) {
                 if( isset($node[$item['id']]) ) {
-                    $item['children'] = self::toTree($item['id'],$node[$item['id']]);
+                    $item['children'] = self::toTree($node[$item['id']], $item['id']);
                 }
                 $tree[] = $item;
             }
