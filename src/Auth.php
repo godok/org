@@ -36,6 +36,7 @@ final class Auth
     {
         $request = Request::instance();
         if ( ! Config::get('auth.auth_on') ) {
+            //关闭验证
            return true;
         }
         
@@ -48,16 +49,18 @@ final class Auth
         
         $action = $request->action();
         $param = $request->param();
-        
+        //刷新用户信息缓存
         self::fresh();
-        $ids = self::user('rules');
-        if (!is_array($ids)) {
+        $userRule = self::user('rules');
+        if (!is_array($userRule)) {
             self::error('对不起！您无权进行该操作.',\think\Request::instance()->root().'/auth/Login/index');
         }
        
-        if ( in_array('all', $ids)) {
+        if ( in_array('all', $userRule)) {
+            //拥有所有权限
             return true;
         }
+        //根据请求找出匹配中的规则
         $query =  Db::name( Config::get('auth.table_rule') )->where('status',1);
         if (!empty($module)) {
             $query->where("module='*' or FIND_IN_SET('".$module."',module)");
@@ -72,8 +75,10 @@ final class Auth
         $rules = [];
         foreach ($list as $rule) {
             if (empty($rule['condition'])) {
+                //无参规则
                 $rules[] = $rule['id'];
             } else {
+                //有参规则
                 $cond = self::parseParam($rule['condition']);
                 $hitall = true;
                 foreach($cond as $key=>$val) {
@@ -94,6 +99,7 @@ final class Auth
                     }
                 }
                 if ($hitall) {
+                    //condition所有参数都被匹配中，只验证这一条规则
                     $rules = [$rule['id']];
                     break;
                 } else {
@@ -102,14 +108,17 @@ final class Auth
             }
         }
         foreach ($rules as $id) {
-            if ( in_array($id, $ids) ) {
+            if ( in_array($id, $userRule) ) {
                 return true;
             }
         }
-        //无权限
         self::error('对不起！您无权进行该操作',\think\Request::instance()->root().'/auth/Login/index');
         exit;
     }
+    /**
+     * 字符串参数转数组
+     * 这里类似parse_str()函数，但是不会转义特殊字符
+     */
     private static function parseParam($str) {
         $param = [];
         $arr = explode('&',$str);
@@ -142,14 +151,17 @@ final class Auth
                     && intval(self::user('_freshtime')) < time() - 60 * intval(Config::get('auth.auth_type'))
                     )
         ) {
+            //实时验证或用户信息缓存已到期
             $groups = self::getGroups();
             if( empty(self::user('id')) ) {
+                //游客
                 $group = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id',3)->find();
                 if ( $group) {
                     $user = ['rules' => array_unique( explode(',', $group['rules']) ), '_freshtime'=>time()];
                     self::user($user);
                 }
             } else {
+                //登录用户
                 $data=Db::name( Config::get('auth.table_user') )->where('id',self::user('id'))->find();
                 if($data['deleted'] || 1 != $data['status'] ) {
                     self::clear();
@@ -167,6 +179,7 @@ final class Auth
                 ];
                 \think\Cookie::set('avatar', $data['avatar'] ?: Config::get('site.resource_url').'images/avatar/default.jpg', 3600*24*7);
                 \think\Cookie::set('nickname', $data['nickname'], 3600*24*7);
+                //继承2个用户组
                 $group23 = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id IN(2,3) AND status=1')->select();
                 $groups = array_merge($groups,$group23);
                 $rules = '';
@@ -334,10 +347,9 @@ final class Auth
      */
     public static function check($action, $uid = null) {
         if ( empty($uid) ) {
-            $ids = self::user('rules');
+            $userRule = self::user('rules');
         } else {
             $groups = self::getGroups();
-          
             $group23 = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id IN(2,3) AND status=1')->select();
             $groups = array_merge($groups,$group23);
             $rules = '';
@@ -347,9 +359,9 @@ final class Auth
             if ( empty($rules) ) {
                 return false;
             }
-            $ids = array_unique( explode(',', $rules) );
+            $userRule = array_unique( explode(',', $rules) );
         }
-        if ( in_array('all', $ids) ) {
+        if ( in_array('all', $userRule) ) {
             return true;
         }
         $type = 'and';
@@ -357,6 +369,7 @@ final class Auth
             //and判断
             $action = explode(',', $action);
         } elseif( strpos($action,'|') ) {
+            //or判断
             $type = 'or';
             $action = explode('|', $action);
         } else {
@@ -368,31 +381,36 @@ final class Auth
             }
             $route = explode('/',$val);
             $query = Db::name( Config::get('auth.table_rule') )->where('status',1);
-            $query->where("action = '*' OR action='" . array_pop($route) . "'");
+            $query->where("action='" . array_pop($route) . "'");
             if (!empty($route)) {
-                $query->where("controller = '*' OR controller='" . array_pop($route) . "'");
+                $query->where("controller='" . array_pop($route) . "'");
             } else {
                 $query->where("controller = ''");
             }
             if (!empty($route)) {
-                $query->where("module = '*' OR module='" . array_pop($route) . "'");
+                $query->where("module='" . array_pop($route) . "'");
             } else {
                 $query->where("module = ''");
             }
             $rule = $query->order('listorder asc,id asc')->find();
             if ( $rule ) {
-                if( in_array($rule['id'], $ids) && $type == 'or') {
+                if( in_array($rule['id'], $userRule) && $type == 'or') {
+                    //【or】其中一条有权限
                     return true;
-                } elseif( !in_array($rule['id'], $ids) && $type == 'and' ) {
+                } elseif( !in_array($rule['id'], $userRule) && $type == 'and' ) {
+                    //【and】其中一条无权限
                     return false;
                 }
             } elseif( $type == 'and') {
+                //【and】其中一条无权限
                 return false;
             }
         }
         if ($type == 'and') {
+           //【and】其中一条无权限都不会到这里，到了这里就表示全部有权限
            return true; 
         } else {
+           //【or】其中一条有权限都不会到这里，到这里表示全部无权限
            return false;
         }
     }
