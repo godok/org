@@ -46,6 +46,9 @@ final class Auth
         if ( $module == 'install' &&  $controller == 'Index') {
             return true;
         }
+        if ( $module == 'auth' &&  $controller == 'Login') {
+            return true;
+        }
         
         $action = $request->action();
         $param = $request->param();
