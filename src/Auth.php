@@ -61,18 +61,19 @@ final class Auth
             return true;
         }
         //根据请求找出匹配中的规则
-        $query =  Db::name( Config::get('auth.table_rule') )->where('status',1);
+        $query =  Db::name( Config::get('auth.table_rule') )->field('`condition`,`id`')->where('status',1);
         if (!empty($module)) {
-            $query->where("module='*' or FIND_IN_SET('".$module."',module)");
+            $query->where("`module`='*' or FIND_IN_SET('".$module."',`module`)");
         }
         if (!empty($controller)) {
-            $query->where("controller='*' or FIND_IN_SET('".$controller."',controller)");
+            $query->where("`controller`='*' or FIND_IN_SET('".$controller."',`controller`)");
         }
         if (!empty($action)) {
-            $query->where("action='*' or FIND_IN_SET('".$action."',action)");
+            $query->where("`action`='*' or FIND_IN_SET('".$action."',`action`)");
         }
         $list = $query->order('listorder asc')->select();
         $rules = [];
+        $rules_p = [];
         foreach ($list as $rule) {
             if (empty($rule['condition'])) {
                 //无参规则
@@ -100,10 +101,13 @@ final class Auth
                 }
                 if ($hitall) {
                     //condition所有参数都被匹配中，只验证这一条规则
-                    $rules = [$rule['id']];
-                    break;
+                    $rules_p[] = $rule['id'];
                 }
             }
+        }
+        //有参规则被匹配中
+        if( !empty($rules_p) ) {
+            $rules = $rules_p;
         }
         foreach ($rules as $id) {
             if ( in_array($id, $userRule) ) {
@@ -160,7 +164,7 @@ final class Auth
                 }
             } else {
                 //登录用户
-                $data=Db::name( Config::get('auth.table_user') )->where('id',self::user('id'))->find();
+                $data=Db::name( Config::get('auth.table_user') )->field('id,username,nickname,avatar,email,phone,deleted,status')->where('id',self::user('id'))->find();
                 if($data['deleted'] || 1 != $data['status'] ) {
                     self::clear();
                     return false;
@@ -384,17 +388,24 @@ final class Auth
                 return false;
             }
             $route = explode('/',$val);
-            $query = Db::name( Config::get('auth.table_rule') )->where('status',1);
-            $query->where("action='" . array_pop($route) . "'");
-            if (!empty($route)) {
-                $query->where("controller='" . array_pop($route) . "'");
+            $query = Db::name( Config::get('auth.table_rule') )->field('id')->where('status',1);
+            $act = array_pop($route);
+            if( $i = strpos($act,'?') ) {
+                $query->where("`condition`='" . substr($act,$i+1) . "'");
+                $act = substr($act,0,$i);
             } else {
-                $query->where("controller = ''");
+                $query->where("`condition`=''");
+            }
+            $query->where("`action`='" . $act . "'");
+            if (!empty($route)) {
+                $query->where("`controller`='" . array_pop($route) . "'");
+            } else {
+                $query->where("`controller` = ''");
             }
             if (!empty($route)) {
-                $query->where("module='" . array_pop($route) . "'");
+                $query->where("`module`='" . array_pop($route) . "'");
             } else {
-                $query->where("module = ''");
+                $query->where("`module` = ''");
             }
             $rule = $query->order('listorder asc,id asc')->find();
             if ( $rule ) {
@@ -428,7 +439,7 @@ final class Auth
      * @param array     $header 发送的Header信息
      * @return void
      */
-    protected static function error($msg = '', $url = null, $data = '', $wait = 9999, array $header = [])
+    protected static function error($msg = '', $url = null, $data = '', $wait = 10, array $header = [])
     {
         $code = -1;
         if (is_numeric($msg)) {
