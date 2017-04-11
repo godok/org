@@ -442,7 +442,7 @@ final class Auth
      * @param array     $header 发送的Header信息
      * @return void
      */
-    protected static function error($msg = '', $url = null, $data = '', $wait = 10, array $header = [])
+    protected static function error($msg = '', $url = null, $data = '', $wait = 9999, array $header = [])
     {
         $code = -1;
         if (is_numeric($msg)) {
