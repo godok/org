@@ -141,12 +141,12 @@ final class Auth
     /**
      * 刷新用户信息
      */
-    private static function fresh(){
+    private static function fresh(){ 
         if ( empty(self::user()) ) {
             //游客登录
             $group = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id',3)->find();
             if ( $group && !empty($group['rules']) ) {
-                $user = ['rules' => array_unique( explode(',', $group['rules']) ), '_freshtime'=>time()];
+                $user = ['rules' => array_unique( explode(',', $group['rules']) ), 'groupids'=>[3], '_freshtime'=>time()];
                 self::user($user);
             }
         } elseif (
@@ -158,11 +158,11 @@ final class Auth
         ) {
             //实时验证或用户信息缓存已到期
             $groups = self::getGroups();
-            if( empty(self::user('id')) ) {
+            if( empty(self::user('id'))) {
                 //游客
                 $group = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id',3)->find();
                 if ( $group) {
-                    $user = ['rules' => array_unique( explode(',', $group['rules']) ), '_freshtime'=>time()];
+                    $user = ['rules' => array_unique( explode(',', $group['rules']) ), 'groupids'=>[3], '_freshtime'=>time()];
                     self::user($user);
                 }
             } else {

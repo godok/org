@@ -38,6 +38,8 @@ class Tree
     }
     /**
      * 设置前后缀
+     * @param 前缀 <ul>
+     * @param 后缀 </ul>
      */
     public function setfix($prefix = '', $postfix = '') {
         $this->prefix = $prefix;
@@ -50,7 +52,7 @@ class Tree
     private function getTree($data = null, $pid = 0)
     {
 
-        if (null === $data || ! is_array($data) ) {
+        if (null === $data ) {
             return [];
         }
         $tree = [];
@@ -65,10 +67,27 @@ class Tree
         return $tree;
     }
     /**
-     * 返回层级菜单
-     * @param $template : 解析模版，如果传入数组格式，返回多级数组，否则返回解析后的字符串
+     * 返回层级菜单【分支数组】
+     * @param $template : 解析模版，如果传入数组格式，返回多级数组，否则返回模版解析后的字符串
      * @param $data : 数组数据，必须包含“id”和“pid”两个键名
      * @param $pid : 根节点
+     * 返回参考
+     * [
+     *  [
+     *    'id' => 1,
+     *    'pid' =>0, 
+     *    'children' => [
+     *      [
+     *        'id' => 3,
+     *        'pid' => 1
+     *      ]
+     *    ]
+     *  ],
+     *  [
+     *    'id' => 2,
+     *    'pid' => 0
+     *  ]
+     * ]
      */
     public function fetch($template = null, $data = null, $pid = 0)
     {
@@ -78,7 +97,7 @@ class Tree
         if ( null !== $template) {
             $this->template = $template;
         }
-        if ( ! is_array($data) ) {
+        if ( empty($data) ) {
             return is_array( $this->template ) ? [] : '';
         }
         //创建节点
@@ -99,6 +118,69 @@ class Tree
             return $tree;
         } else {
             return $this->parse($tree);
+        }
+    }
+    /**
+     * 数组排序【无分支】
+     * @param 原始数组
+     * @param 根节点
+     * 返回参考 ：  子项目排在父项目后面
+     * [
+     *  [
+     *    'id' => 1,
+     *    'pid' =>0, 
+     *  ],
+     *  [
+     *    'id' => 3,
+     *    'pid' =>1, 
+     *  ],
+     *  [
+     *    'id' => 2,
+     *    'pid' => 0
+     *  ]
+     * ]
+     */
+    public function sort($data = null, $pid = 0)
+    {
+        if ( null === $data ) {
+            $data = $this->data;
+        }
+        //创建节点
+        $this->node = [];
+        foreach ($data as $item) {
+            if ($item['pid'] == $item['id']) {
+                //避免死循环
+                continue;
+            }
+            if ( isset($this->node[$item['pid']]) ) {
+                $this->node[$item['pid']][] = $item;
+            } else {
+                $this->node[$item['pid']] = [$item];
+            }
+        }
+        $this->noTree($data, $pid, $list);
+        return $list;
+    }
+    /**
+     * 无分支数组组装
+     */
+    private function noTree($data = [], $pid=0, &$result,  $n = 0){
+    
+        if(empty($data) ) {
+            return false;
+        }
+        foreach( $data as $item ) {
+            if($n > 0) {
+                $item['__prefix'] = str_repeat('...', $n);
+            } else {
+                $item['__prefix'] = '';
+            }
+            if($pid == $item['pid']) {
+                $result[] = $item;
+                if( isset($this->node[$item['id']]) ) {
+                    $this->noTree($this->node[$item['id']], $item['id'], $result,  $n+1);
+                }
+            }
         }
     }
     /**
