@@ -28,7 +28,7 @@ final class Auth
     /**
      * 用户session变量空间
      */
-    protected static $prefix = 'auth';
+    protected static $prefix = 'goauth';
     /**
      * 行为验证
      */
@@ -36,7 +36,7 @@ final class Auth
     {
         $request = Request::instance();
         if ( ! Config::get('auth.auth_on') ) {
-            //关闭验证
+            //验证未启用
            return true;
         }
         
@@ -90,25 +90,29 @@ final class Auth
                         $hitall = false;
                         break;
                     } elseif (!empty($val)) {
+                        //匹配指定
                         if ( 0 === strpos($val,'/') ) {
+                            //正则匹配
                             if (!preg_match($val,$param[$key])) {
                                 $hitall = false;
                                 break;
                             }
                         } elseif ($val != $param[$key]) {
+                            //相等匹配
                             $hitall = false;
                             break;
                         }
-                        
+                    } else {
+                        //匹配所有值
                     }
                 }
                 if ($hitall) {
-                    //condition所有参数都被匹配中，只验证这一条规则
+                    //匹配中一条有参规则
                     $rules_p[] = $rule['id'];
                 }
             }
         }
-        //有参规则被匹配中
+        //有参规则被匹配中，验证有参规则
         if( !empty($rules_p) ) {
             $rules = $rules_p;
         }
@@ -144,11 +148,7 @@ final class Auth
     private static function fresh(){ 
         if ( empty(self::user()) ) {
             //游客登录
-            $group = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id',3)->find();
-            if ( $group && !empty($group['rules']) ) {
-                $user = ['rules' => array_unique( explode(',', $group['rules']) ), 'groupids'=>[3], '_freshtime'=>time()];
-                self::user($user);
-            }
+            self::clean();
         } elseif (
                 Config::get('auth.auth_type') == '1' 
                 || ( 
@@ -156,54 +156,27 @@ final class Auth
                     && intval(self::user('_freshtime')) < time() - 60 * intval(Config::get('auth.auth_type'))
                     )
         ) {
-            //实时验证或用户信息缓存已到期
-            $groups = self::getGroups();
+            //实时验证或用户信息已过期
             if( empty(self::user('id'))) {
                 //游客
-                $group = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id',3)->find();
-                if ( $group) {
-                    $user = ['rules' => array_unique( explode(',', $group['rules']) ), 'groupids'=>[3], '_freshtime'=>time()];
-                    self::user($user);
-                }
+                self::clean();
             } else {
                 //登录用户
-                $data=Db::name( Config::get('auth.table_user') )->field('id,username,nickname,avatar,email,phone,deleted,status')->where('id',self::user('id'))->find();
+                $data=Db::name( Config::get('auth.table_user') )->field('id,username,nickname,deleted,status')->where('id',self::user('id'))->find();
                 if($data['deleted'] || 1 != $data['status'] ) {
-                    self::clear();
+                    //用户被删除或被禁用，切换到游客模式
+                    self::clean();
                     return false;
                 }
-                $user=[
-                    'id'=>$data['id'],
-                    'username'=>$data['username'],
-                    'nickname'=>$data['nickname'],
-                    'avatar'=>$data['avatar'],
-                    'email'=>$data['email'],
-                    'phone'=>$data['phone'],
-                    'rules'=>[],
-                    'groupids'=>[]
-                ];
-                \think\Cookie::set('avatar', $data['avatar'] ?: Config::get('site.resource_url').'images/avatar/default.jpg', 3600*24*7);
-                \think\Cookie::set('nickname', $data['nickname'], 3600*24*7);
-                //继承2个用户组
-                $group23 = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id IN(2,3) AND status=1')->select();
-                $groups = array_merge($groups,$group23);
-                $rules = '';
-                foreach ( $groups as $group) {
-                    $rules .= $rules ? ',' . $group['rules'] : $group['rules'];
-                    if ($group['id'] !=2 && $group['id'] != 3) {
-                        $user['groupids'][] = $group['id'];
-                    }
-                     
-                }
-                if( !empty($rules) ) {
-                    $user['rules'] = array_unique( explode(',', $rules) );
-                }
-                $user['_freshtime'] = time();
-                Auth::user($user);
-                
+                self::set('username', $data['username']);
+                self::set('nickname', $data['nickname']);
+                self::set('groupids', self::getGroupids());
+                self::set('rules',    self::getRules());
+                self::set('_freshtime', time() );  
             }
         }
     }
+
     /**
      * 注册用户信息
      * @参数1 $name
@@ -241,14 +214,23 @@ final class Auth
             Session::delete('user.'.$name, self::$prefix);
         } elseif ( is_string($name) ) {
             Session::set('user.'.$name,$value,self::$prefix);
+        } elseif ( is_array($name) ) {
+            Session::set('user',$value,self::$prefix);
         }
     }
     /**
-     * 注销用户信息
+     * 注销用户,切换为游客模式
      */
-    public static function clear()
+    public static function clean()
     {
-        Session::delete('user',self::$prefix);   
+        $group = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id',3)->find();
+        if ( $group) {
+            $user = ['rules' => array_unique( explode(',', $group['rules']) ), 'groupids'=>[3], '_freshtime'=>time()];
+            Session::set('user', $user, self::$prefix);
+        } else {
+            Session::delete('user',self::$prefix);
+        }
+        
     }
     /**
      * 获取树状菜单
@@ -317,7 +299,7 @@ final class Auth
     /**
      * 根据用户id获取用户组,返回值为数组
      * @param  $uid int     用户id ，默认是当前登录用户
-     * @param  $onlyid boolen 是否只返回id
+     * @param  $onlyid boolen 是否只返回id,self::getGroupids()
      * @return array       用户所属的用户组 array(
      *              array('uid'=>'用户id','group_id'=>'用户组id','title'=>'用户组名称','rules'=>'用户组拥有的规则id,多个,号隔开'),
      *              ...)
@@ -332,7 +314,11 @@ final class Auth
         }
         static $groups = [];
         if (isset($groups[$uid])) {
-            return $groups[$uid];
+            if($onlyid) {
+                return self::getGroupids($groups[$uid]);
+            } else {
+                return $groups[$uid];
+            }
         }
         $user_groups = Db::view( Config::get('auth.table_group_relation'), 'uid')
             ->view( Config::get('auth.table_group') , 'status,rules,id,listorder,title', Config::get('auth.table_group').'.id='.Config::get('auth.table_group_relation').'.group_id')
@@ -342,13 +328,68 @@ final class Auth
             ->select();
         $groups[$uid] = $user_groups ?: [];
         if($onlyid) {
-           $ids = [];
-           foreach($user_groups as $val) {
-               $ids[] = $val['id'];
-           }
-           return $ids;
+           return self::getGroupids($groups[$uid]);
+        } else {
+           return $groups[$uid];
         }
-        return $groups[$uid];
+    }
+    /**
+     * 获取用户组id数组
+     * @params mixed
+     * 传入数组：groups
+     * 传入字符串或整数： uid
+     * 缺省值：当前用户的groups
+     */
+    public static function getGroupids($groups = null){
+        if (null === $groups) {
+            $groups = self::getGroups();
+        } elseif (is_string($groups) || is_int($groups) ) {
+            $groups = self::getGroups($groups);
+        }
+        $ids = [];
+        foreach($groups as $val) {
+            if( isset($val['id']) ) {
+                $ids[] = $val['id'];
+            }
+        }
+        return $ids;
+    }
+    /**
+     * 获取权限id数组
+     * @params mixed
+     * 传入groupids数组 ： 返回对应groups包含的权限
+     * 传入groups数组 ： 返回groups包含的权限
+     * 传入字符串或者整数：返回指定用户的权限,继承游客和登录用户组的权限
+     * 缺省值：返回当前用户的权限,继承游客和登录用户组的权限
+     */
+    public static function getRules($groups = null){
+        $ext = false;
+        if (null === $groups) {
+            //当前用户的权限组
+            $groups = self::getGroups();
+            $ext = true;
+        } elseif (is_string($groups) || is_int($groups) ) {
+            //uid的权限组
+            $groups = self::getGroups($groups);
+            $ext = true;
+        } elseif ( is_array($groups) && isset($groups[0]) && !isset($groups[0]['id'])) {
+            //groupids转groups
+            $groups = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('status',1)->where('id','in',$groups)->select();
+        }
+        if ( $ext ) {
+            $group23 = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id IN(2,3) AND status=1')->select();
+            $groups = array_merge($groups,$group23);
+        }      
+        $rules = '';
+        foreach ( $groups as $group) {
+            $rules .= $rules ? ',' . $group['rules'] : $group['rules'];  
+        }
+        if( !empty($rules) ) {
+            return array_unique( explode(',', $rules) );
+        } else {
+            return [];
+        }
+       
     }
     /**
      * 判断权限
@@ -360,17 +401,7 @@ final class Auth
         if ( empty($uid) ) {
             $userRule = self::user('rules');
         } else {
-            $groups = self::getGroups();
-            $group23 = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id IN(2,3) AND status=1')->select();
-            $groups = array_merge($groups,$group23);
-            $rules = '';
-            foreach ( $groups as $group) {
-                $rules .= $rules ? ',' . $group['rules'] : $group['rules'];
-            }
-            if ( empty($rules) ) {
-                return false;
-            }
-            $userRule = array_unique( explode(',', $rules) );
+            $userRule = self::getRules($uid);
         }
         if ( in_array('all', $userRule) ) {
             return true;
