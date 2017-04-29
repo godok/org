@@ -64,7 +64,7 @@ final class Auth
             return true;
         }
         //根据请求找出匹配中的规则
-        $query =  Db::name( Config::get('auth.table_rule') )->field('`condition`,`id`')->where('status',1);
+        $query =  Db::connect([],'goauthqq158937496')->name( Config::get('auth.table_rule') )->field('`condition`,`id`')->where('status',1);
         if (!empty($module)) {
             $query->where("`module`='*' or FIND_IN_SET('".$module."',`module`)");
         }
@@ -162,7 +162,7 @@ final class Auth
                 self::clean();
             } else {
                 //登录用户
-                $data=Db::name( Config::get('auth.table_user') )->field('id,username,nickname,deleted,status')->where('id',self::user('id'))->find();
+                $data=Db::connect([],'goauthqq158937496')->name( Config::get('auth.table_user') )->field('id,username,nickname,deleted,status')->where('id',self::user('id'))->find();
                 if($data['deleted'] || 1 != $data['status'] ) {
                     //用户被删除或被禁用，切换到游客模式
                     self::clean();
@@ -223,7 +223,7 @@ final class Auth
      */
     public static function clean()
     {
-        $group = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id',3)->find();
+        $group = Db::connect([],'goauthqq158937496')->name( Config::get('auth.table_group') )->field('id,rules')->where('id',3)->find();
         if ( $group) {
             $user = ['rules' => array_unique( explode(',', $group['rules']) ), 'groupids'=>[3], '_freshtime'=>time()];
             Session::set('user', $user, self::$prefix);
@@ -244,7 +244,7 @@ final class Auth
         if(!is_array($ids)) {
             return [];
         }
-        $query =  Db::name( Config::get('auth.table_rule') );
+        $query =  Db::connect([],'goauthqq158937496')->name( Config::get('auth.table_rule') );
         if( !in_array('all', $ids)) {
             $query->where('id', 'in', $ids);
         }
@@ -320,7 +320,7 @@ final class Auth
                 return $groups[$uid];
             }
         }
-        $user_groups = Db::view( Config::get('auth.table_group_relation'), 'uid')
+        $user_groups = Db::connect([],'goauthqq158937496')->view( Config::get('auth.table_group_relation'), 'uid')
             ->view( Config::get('auth.table_group') , 'status,rules,id,listorder,title', Config::get('auth.table_group').'.id='.Config::get('auth.table_group_relation').'.group_id')
             ->where(['uid'=>$uid,'status'=>1])
             ->order('listorder asc,id asc')
@@ -374,10 +374,10 @@ final class Auth
             $ext = true;
         } elseif ( is_array($groups) && isset($groups[0]) && !isset($groups[0]['id'])) {
             //groupids转groups
-            $groups = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('status',1)->where('id','in',$groups)->select();
+            $groups = Db::connect([],'goauthqq158937496')->name( Config::get('auth.table_group') )->field('id,rules')->where('status',1)->where('id','in',$groups)->select();
         }
         if ( $ext ) {
-            $group23 = Db::name( Config::get('auth.table_group') )->field('id,rules')->where('id IN(2,3) AND status=1')->select();
+            $group23 = Db::connect([],'goauthqq158937496')->name( Config::get('auth.table_group') )->field('id,rules')->where('id IN(2,3) AND status=1')->select();
             $groups = array_merge($groups,$group23);
         }      
         $rules = '';
@@ -422,7 +422,7 @@ final class Auth
                 return false;
             }
             $route = explode('/',$val);
-            $query = Db::name( Config::get('auth.table_rule') )->field('id')->where('status',1);
+            $query = Db::connect([],'goauthqq158937496')->name( Config::get('auth.table_rule') )->field('id')->where('status',1);
             $act = array_pop($route);
             if( $i = strpos($act,'?') ) {
                 $query->where("`condition`='" . substr($act,$i+1) . "'");

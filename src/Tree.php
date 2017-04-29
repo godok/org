@@ -170,8 +170,10 @@ class Tree
             return false;
         }
         foreach( $data as $item ) {
-            if($n > 0) {
-                $item['__prefix'] = str_repeat('...', $n);
+            if($n == 1 ) {
+                $item['__prefix'] = '┕ ';
+            } else if($n > 1) {
+                $item['__prefix'] = str_repeat('...', $n-1).'┕ ';
             } else {
                 $item['__prefix'] = '';
             }
